@@ -126,16 +126,26 @@ def proses_data():
         # Dapatkan semua drive (kecuali C:)
         drives = [f"{d}:\\" for d in string.ascii_uppercase if os.path.exists(f"{d}:\\") and d != "C"]
         
-        # Dapatkan semua path dari database
-        cursor.execute("SELECT song_relative_path FROM song")
-        db_paths = {row[0].strip().lower() for row in cursor.fetchall() if row[0]}
+        # Dapatkan semua path dari database untuk kategori yang dipilih
+        query = "SELECT song_relative_path FROM song WHERE "
+        where_clauses = []
+        for cat in selected_categories:
+            # Cari path yang mengandung nama kategori
+            where_clauses.append(f"song_relative_path LIKE '%{cat}%'")
+        query += " OR ".join(where_clauses)
+        
+        cursor.execute(query)
+        db_paths = set()
+        for row in cursor.fetchall():
+            if row[0]:  # Jika path tidak NULL
+                # Normalisasi path: lowercase dan ganti backslash dengan forward slash
+                normalized_path = row[0].strip().lower().replace('\\', '/')
+                db_paths.add(normalized_path)
         
         unused_files = []
         
         for drive in drives:
-            # Cari di setiap kategori yang dipilih
             for kategori in selected_categories:
-                # Format path: drive/Kategori/
                 search_path = os.path.join(drive, kategori)
                 
                 if not os.path.exists(search_path):
@@ -144,11 +154,11 @@ def proses_data():
                 for root_dir, _, files in os.walk(search_path):
                     for file in files:
                         full_path = os.path.join(root_dir, file)
-                        # Format path relatif: Kategori/subfolder/file
-                        relative_path = os.path.relpath(full_path, drive).replace('\\', '/')
+                        # Dapatkan path relatif terhadap drive
+                        rel_path = os.path.relpath(full_path, drive).replace('\\', '/').lower()
                         
-                        # Cek apakah ada di database
-                        if relative_path.lower() not in db_paths:
+                        # Cek apakah path ada di database
+                        if rel_path not in db_paths:
                             unused_files.append((file, full_path))
         
         # Tampilkan hasil
@@ -249,7 +259,7 @@ scroll_y_db.config(command=tree_db.yview)
 scroll_x_db.config(command=tree_db.xview)
 
 # Frame kanan: missing files
-frame_missing = tk.LabelFrame(frame_tables, text="Tidak ditemukan di folder")
+frame_missing = tk.LabelFrame(frame_tables, text="Output")
 frame_missing.pack(side="left", fill="both", expand=True, padx=5, pady=5)
 
 scroll_y_missing = ttk.Scrollbar(frame_missing, orient="vertical")
