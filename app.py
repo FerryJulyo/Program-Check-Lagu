@@ -101,7 +101,7 @@ def proses_data():
 # ==== GUI ====
 root = tk.Tk()
 root.title("Database & File Checker")
-root.geometry("1200x600")
+root.geometry("800x600")
 
 # Frame atas
 frame_top = tk.Frame(root)
