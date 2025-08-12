@@ -124,10 +124,10 @@ class App:
         
         self.tree_missing = ttk.Treeview(frame_missing, columns=("col1", "col2"), show="headings",
                                        yscrollcommand=scroll_y_missing.set, xscrollcommand=scroll_x_missing.set)
-        self.tree_missing.heading("col1", text="Nama File")
-        self.tree_missing.heading("col2", text="Lokasi")
-        self.tree_missing.column("col1", width=200, anchor="w")
-        self.tree_missing.column("col2", width=400, anchor="w")
+        self.tree_missing.heading("col1", text="")
+        self.tree_missing.heading("col2", text="")
+        self.tree_missing.column("col1", width=80, anchor="w")
+        self.tree_missing.column("col2", width=300, anchor="w")
         self.tree_missing.pack(fill="both", expand=True)
         
         scroll_y_missing.config(command=self.tree_missing.yview)
