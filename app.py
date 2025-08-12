@@ -4,6 +4,7 @@ from tkinter import filedialog, ttk, messagebox
 import os
 import threading
 from queue import Queue
+import re
 
 db_path = None
 server_location = ""
@@ -22,8 +23,8 @@ class App:
         self.running = False
         
     def setup_ui(self):
-        self.root.title("Database & File Checker")
-        self.root.geometry("800x600")
+        self.root.title("Program Check Lagu Ver. 20250801")
+        self.root.geometry("800x650")
         
         # Variabel
         self.search_mode = tk.IntVar(value=1)
@@ -47,7 +48,7 @@ class App:
         frame_server = tk.Frame(frame_top)
         frame_server.pack(side="right", fill="x")
         
-        lbl_server = tk.Label(frame_server, text="Lokasi Server (LAN):")
+        lbl_server = tk.Label(frame_server, text="Lokasi Server:")
         lbl_server.pack(side="left", padx=5)
         
         self.entry_server = tk.Entry(frame_server, width=30)
@@ -57,20 +58,24 @@ class App:
         # Mode pencarian
         frame_options = tk.Frame(self.root)
         frame_options.pack(fill="x", padx=5, pady=5)
-        
+
         frame_radio = tk.LabelFrame(frame_options, text="Mode Pencarian")
         frame_radio.pack(side="left", fill="y", padx=5, pady=5)
-        
-        tk.Radiobutton(frame_radio, text="Cari Lagu Belum", variable=self.search_mode, value=1).pack(anchor="w", padx=5, pady=2)
-        tk.Radiobutton(frame_radio, text="Cari Lagu Tidak Terpakai", variable=self.search_mode, value=2).pack(anchor="w", padx=5, pady=2)
-        
+
+        tk.Radiobutton(frame_radio, text="Lagu Belum", variable=self.search_mode, value=1).pack(anchor="w", padx=5, pady=2)
+        tk.Radiobutton(frame_radio, text="Lagu Tidak Terpakai", variable=self.search_mode, value=2).pack(anchor="w", padx=5, pady=2)
+
         # Kategori
         frame_check = tk.LabelFrame(frame_options, text="Pilih Kategori Folder")
         frame_check.pack(side="left", fill="both", expand=True, padx=5, pady=5)
-        
+
+        # Hitung jumlah kolom untuk 3 baris
+        total_kategori = len(kategori_list)
+        cols_per_row = (total_kategori + 2) // 3  # Pembulatan ke atas untuk 3 baris
+
         for idx, kategori in enumerate(kategori_list):
             cb = tk.Checkbutton(frame_check, text=kategori, variable=self.kategori_vars[kategori])
-            cb.grid(row=idx // 8, column=idx % 8, sticky="w", padx=5, pady=2)
+            cb.grid(row=idx // cols_per_row, column=idx % cols_per_row, sticky="w", padx=5, pady=2)
         
         # Tombol proses
         self.btn_proses = tk.Button(self.root, text="Proses", command=self.start_processing, bg="lightblue")
@@ -130,6 +135,16 @@ class App:
         
         # Cek queue secara berkala
         self.root.after(100, self.process_queue)
+    
+    def normalize_filename(self, filename):
+        """Normalize filename untuk perbandingan"""
+        # Hapus ekstensi
+        name = os.path.splitext(filename)[0]
+        # Ambil hanya bagian ID (angka + huruf di awal)
+        match = re.match(r'^(\d+[A-Za-z]*)', name)
+        if match:
+            return match.group(1).upper()
+        return name.upper()
     
     def pilih_file(self):
         global db_path
@@ -239,53 +254,77 @@ class App:
                 self.queue.put(("result", f"Total: {total} | Missing: {len(missing_songs)} | Found: {total - len(missing_songs)}"))
                 
             else:  # Mode Cari Lagu Tidak Terpakai
-                query = "SELECT song_relative_path FROM song WHERE " + \
+                # Tampilkan data dari database
+                query_select = "SELECT song_id, song_name, song_relative_path FROM song WHERE " + \
+                        " OR ".join([f"song_relative_path LIKE '%{cat}%'" for cat in selected_categories]) + \
+                        " ORDER BY song_id"
+                
+                cursor.execute(query_select)
+                rows = cursor.fetchall()
+                for row in rows:
+                    song_id, song_name, _ = row
+                    self.queue.put(("add_db", (song_id, song_name)))
+                
+                # Dapatkan semua song_id dari database untuk kategori yang dipilih
+                query_ids = "SELECT song_id FROM song WHERE " + \
                         " OR ".join([f"song_relative_path LIKE '%{cat}%'" for cat in selected_categories])
                 
-                cursor.execute(query)
-                db_paths = set()
+                cursor.execute(query_ids)
+                db_song_ids = set()
                 for row in cursor.fetchall():
                     if row[0]:
-                        normalized_path = row[0].strip().lower().replace('\\', '/')
-                        db_paths.add(normalized_path)
+                        # Normalize song_id dari database
+                        normalized_id = self.normalize_filename(str(row[0]))
+                        db_song_ids.add(normalized_id)
                 
                 unused_files = []
                 total_files = 0
-                
-                for kategori in selected_categories:
-                    search_path = os.path.join(server_location, kategori)
-                    
-                    if not os.path.exists(search_path):
-                        continue
-                        
-                    # Hitung total file dulu untuk progress bar
-                    for root_dir, _, files in os.walk(search_path):
-                        total_files += len(files)
-                
                 processed_files = 0
                 
+                # Hitung total file hanya di folder utama (tanpa subfolder)
+                for kategori in selected_categories:
+                    search_path = os.path.join(server_location, kategori)
+                    if os.path.exists(search_path):
+                        # Hanya file di folder utama, bukan subfolder
+                        total_files += len([f for f in os.listdir(search_path) 
+                                        if os.path.isfile(os.path.join(search_path, f))])
+                
+                # Kirim progress 0% di awal
+                self.queue.put(("progress", (0, total_files)))
+                
                 for kategori in selected_categories:
                     search_path = os.path.join(server_location, kategori)
                     
                     if not os.path.exists(search_path):
                         continue
                         
-                    for root_dir, _, files in os.walk(search_path):
-                        for file in files:
-                            full_path = os.path.join(root_dir, file)
-                            rel_path = os.path.relpath(full_path, server_location).replace('\\', '/').lower()
-                            
-                            if rel_path not in db_paths:
-                                unused_files.append((file, full_path))
-                            
-                            processed_files += 1
+                    # Hanya proses file di folder utama, tidak termasuk subfolder
+                    for file in os.listdir(search_path):
+                        file_path = os.path.join(search_path, file)
+                        if not os.path.isfile(file_path):
+                            continue
+
+                        # Normalize nama file untuk perbandingan
+                        normalized_file = self.normalize_filename(file)
+
+                        # Jika file ID tidak ada di database, maka file tidak terpakai
+                        if normalized_file not in db_song_ids:
+                            unused_files.append((file, file_path))
+                        
+                        processed_files += 1
+                        # Update progress setiap file
+                        if processed_files % 5 == 0:  # Update lebih sering untuk feedback visual
                             self.queue.put(("progress", (processed_files, total_files)))
                 
+                # Pastikan progress terakhir di-update
+                self.queue.put(("progress", (processed_files, total_files)))
+                
+                # Tampilkan file yang tidak terpakai
                 for file_name, file_path in unused_files:
                     self.queue.put(("add_missing", (file_name, file_path)))
                 
-                self.queue.put(("result", f"Total File Tidak Terpakai: {len(unused_files)}"))
-                
+                self.queue.put(("result", f"Total File Tidak Terpakai: {len(unused_files)}")) 
+
         except Exception as e:
             self.queue.put(("error", str(e)))
         finally:
@@ -321,5 +360,6 @@ class App:
 
 if __name__ == "__main__":
     root = tk.Tk()
+    root.iconbitmap("icon.ico")
     app = App(root)
     root.mainloop()
