@@ -5,6 +5,7 @@ import os
 import string
 
 db_path = None  # Menyimpan path database global
+server_location = ""  # Menyimpan lokasi server
 
 # Daftar kategori untuk checkbox
 kategori_list = [
@@ -29,7 +30,7 @@ def pilih_file():
 
 # Proses data
 def proses_data():
-    global db_path
+    global db_path, server_location
     if not db_path:
         messagebox.showwarning("Peringatan", "Pilih database terlebih dahulu.")
         return
@@ -38,8 +39,17 @@ def proses_data():
         messagebox.showerror("Error", f"File tidak ditemukan: {db_path}")
         return
 
+    # Ambil lokasi server dari input
+    server_location = entry_server.get().strip()
+    if not server_location:
+        messagebox.showwarning("Peringatan", "Masukkan lokasi server terlebih dahulu.")
+        return
+
     # Ambil pilihan kategori
     selected_categories = [cat for cat, var in kategori_vars.items() if var.get() == 1]
+    if not selected_categories:
+        messagebox.showwarning("Peringatan", "Pilih minimal 1 kategori.")
+        return
     
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
@@ -59,15 +69,10 @@ def proses_data():
         tree_missing.delete(i)
 
     if search_mode.get() == 1:  # Mode Cari Lagu Belum
-        if not selected_categories:
-            messagebox.showwarning("Peringatan", "Pilih minimal 1 kategori.")
-            return
-
         # Ambil data dari DB termasuk song_relative_path
         query = "SELECT song_id, song_name, song_relative_path FROM song"
-        if selected_categories:
-            where_clauses = [f"song_relative_path LIKE '%{cat}%'" for cat in selected_categories]
-            query += " WHERE " + " OR ".join(where_clauses)
+        where_clauses = [f"song_relative_path LIKE '%{cat}%'" for cat in selected_categories]
+        query += " WHERE " + " OR ".join(where_clauses)
         query += " ORDER BY song_id"
 
         cursor.execute(query)
@@ -84,9 +89,6 @@ def proses_data():
                 'relative_path': relative_path.strip() if relative_path else ''
             })
 
-        # Cari file di seluruh drive (kecuali C:)
-        drives = [f"{d}:\\" for d in string.ascii_uppercase if os.path.exists(f"{d}:\\") and d != "C"]
-        
         missing_songs = []
         
         for song in db_songs:
@@ -99,16 +101,10 @@ def proses_data():
             if relative_path.startswith('\\'):
                 relative_path = relative_path[1:]
             
-            file_found = False
+            # Gabungkan dengan path server
+            full_path = os.path.join(server_location, relative_path)
             
-            # Cek di semua drive
-            for drive in drives:
-                full_path = os.path.join(drive, relative_path)
-                if os.path.exists(full_path):
-                    file_found = True
-                    break
-            
-            if not file_found:
+            if not os.path.exists(full_path):
                 missing_songs.append((song['id'], song['name']))
 
         # Masukkan ke tabel missing
@@ -119,13 +115,6 @@ def proses_data():
         lbl_result.config(text=f"Total: {len(db_songs)} | Missing: {len(missing_songs)} | Found: {len(db_songs) - len(missing_songs)}")
 
     else:  # Mode Cari Lagu Tidak Terpakai
-        if not selected_categories:
-            messagebox.showwarning("Peringatan", "Pilih minimal 1 kategori.")
-            return
-
-        # Dapatkan semua drive (kecuali C:)
-        drives = [f"{d}:\\" for d in string.ascii_uppercase if os.path.exists(f"{d}:\\") and d != "C"]
-        
         # Dapatkan semua path dari database untuk kategori yang dipilih
         query = "SELECT song_relative_path FROM song WHERE "
         where_clauses = []
@@ -144,22 +133,21 @@ def proses_data():
         
         unused_files = []
         
-        for drive in drives:
-            for kategori in selected_categories:
-                search_path = os.path.join(drive, kategori)
+        for kategori in selected_categories:
+            search_path = os.path.join(server_location, kategori)
+            
+            if not os.path.exists(search_path):
+                continue
                 
-                if not os.path.exists(search_path):
-                    continue
+            for root_dir, _, files in os.walk(search_path):
+                for file in files:
+                    full_path = os.path.join(root_dir, file)
+                    # Dapatkan path relatif terhadap server location
+                    rel_path = os.path.relpath(full_path, server_location).replace('\\', '/').lower()
                     
-                for root_dir, _, files in os.walk(search_path):
-                    for file in files:
-                        full_path = os.path.join(root_dir, file)
-                        # Dapatkan path relatif terhadap drive
-                        rel_path = os.path.relpath(full_path, drive).replace('\\', '/').lower()
-                        
-                        # Cek apakah path ada di database
-                        if rel_path not in db_paths:
-                            unused_files.append((file, full_path))
+                    # Cek apakah path ada di database
+                    if rel_path not in db_paths:
+                        unused_files.append((file, full_path))
         
         # Tampilkan hasil
         for file_name, file_path in unused_files:
@@ -180,11 +168,30 @@ search_mode.set(1)
 frame_top = tk.Frame(root)
 frame_top.pack(fill="x", pady=5)
 
-btn_pilih = tk.Button(frame_top, text="Pilih Database", command=pilih_file)
+# Frame untuk pilih database dan server location
+frame_db_selection = tk.Frame(frame_top)
+frame_db_selection.pack(fill="x", pady=5)
+
+# Bagian kiri: pilih database
+frame_db_left = tk.Frame(frame_db_selection)
+frame_db_left.pack(side="left", fill="x", expand=True)
+
+btn_pilih = tk.Button(frame_db_left, text="Pilih Database", command=pilih_file)
 btn_pilih.pack(side="left", padx=5)
 
-lbl_file = tk.Label(frame_top, text="Belum ada file dipilih", anchor="w")
+lbl_file = tk.Label(frame_db_left, text="Belum ada file dipilih", anchor="w")
 lbl_file.pack(side="left", padx=5)
+
+# Bagian kanan: input server location
+frame_db_right = tk.Frame(frame_db_selection)
+frame_db_right.pack(side="right", fill="x")
+
+lbl_server = tk.Label(frame_db_right, text="Lokasi Server (LAN):")
+lbl_server.pack(side="left", padx=5)
+
+entry_server = tk.Entry(frame_db_right, width=30)
+entry_server.pack(side="left", padx=5)
+entry_server.insert(0, "\\\\192.168.1.11")  # Contoh format path server
 
 # Frame untuk opsi pencarian (radio button dan checkbox dalam satu baris)
 frame_options = tk.Frame(root)
