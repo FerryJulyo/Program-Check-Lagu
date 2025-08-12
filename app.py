@@ -201,7 +201,14 @@ class App:
         try:
             conn = sqlite3.connect(db_path)
             cursor = conn.cursor()
-            
+
+            check_path = os.path.join(server_location, "Indonesia")
+
+            # 2️⃣ Cek apakah path bisa diakses
+            if not os.path.exists(check_path):
+                messagebox.showwarning("Koneksi Gagal", f"Tidak dapat mengakses server")
+                return  # Stop proses
+
             # Cek tabel song
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
             tables = [t[0] for t in cursor.fetchall()]
