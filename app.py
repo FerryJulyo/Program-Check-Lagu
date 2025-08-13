@@ -91,6 +91,13 @@ class App:
         self.lbl_result = tk.Label(self.root, text="", fg="blue", font=("Arial", 10, "bold"))
         self.lbl_result.pack(pady=2)
         
+        # Frame tombol download (awalnya disembunyikan)
+        self.frame_download = tk.Frame(self.root)
+        self.btn_download = tk.Button(self.frame_download, text="Download CSV", command=self.download_csv)
+        self.btn_download.pack(side="left", padx=5)
+        self.btn_open_folder = tk.Button(self.frame_download, text="Buka Folder Output", command=self.open_output_folder)
+        self.btn_open_folder.pack(side="left", padx=5)
+        
         # Frame tabel
         frame_tables = tk.Frame(self.root)
         frame_tables.pack(fill="both", expand=True)
@@ -189,6 +196,7 @@ class App:
             
         self.progress["value"] = 0
         self.btn_proses.config(state="disabled")
+        self.frame_download.pack_forget()  # Sembunyikan tombol download
         self.running = True
         
         # Jalankan di thread terpisah
@@ -361,6 +369,9 @@ class App:
                     self.tree_db.insert("", tk.END, values=data)
                 elif msg_type == "add_missing":
                     self.tree_missing.insert("", tk.END, values=data)
+                    # Tampilkan tombol download jika ada data di tree_missing
+                    if not self.frame_download.winfo_ismapped():
+                        self.frame_download.pack(pady=5)
                 elif msg_type == "progress":
                     processed, total = data
                     if total > 0:
@@ -378,6 +389,52 @@ class App:
             pass
             
         self.root.after(100, self.process_queue)
+    
+    def download_csv(self):
+        # Minta lokasi penyimpanan file
+        file_path = filedialog.asksaveasfilename(
+            defaultextension=".csv",
+            filetypes=[("CSV Files", "*.csv"), ("All Files", "*.*")],
+            title="Simpan Output sebagai CSV"
+        )
+        
+        if not file_path:
+            return  # User membatalkan
+        
+        try:
+            with open(file_path, 'w', newline='', encoding='utf-8') as csvfile:
+                writer = csv.writer(csvfile)
+                
+                # Tulis header
+                headers = [self.tree_missing.heading(col)['text'] for col in self.tree_missing['columns']]
+                writer.writerow(headers)
+                
+                # Tulis data
+                for item in self.tree_missing.get_children():
+                    row = self.tree_missing.item(item)['values']
+                    writer.writerow(row)
+            
+            messagebox.showinfo("Sukses", f"File CSV berhasil disimpan di:\n{file_path}")
+        except Exception as e:
+            messagebox.showerror("Error", f"Gagal menyimpan file CSV:\n{str(e)}")
+    
+    def open_output_folder(self):
+        # Buka folder output (folder 'move' di kategori pertama yang dipilih)
+        selected_categories = [cat for cat, var in self.kategori_vars.items() if var.get() == 1]
+        if not selected_categories:
+            return
+            
+        server_location = self.entry_server.get().strip()
+        if not server_location:
+            return
+            
+        first_category = selected_categories[0]
+        move_path = os.path.join(server_location, first_category, "move")
+        
+        if os.path.exists(move_path):
+            os.startfile(move_path)
+        else:
+            messagebox.showinfo("Info", f"Folder output tidak ditemukan:\n{move_path}")
 
 if __name__ == "__main__":
     root = tk.Tk()
