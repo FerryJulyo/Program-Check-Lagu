@@ -249,7 +249,7 @@ class App:
                 for song in db_songs:
                     relative_path = song['relative_path']
                     if not relative_path:
-                        missing_songs.append((song['id'], song['name']))
+                        missing_songs.append((song['id'], song['name']))  # Hanya 2 nilai
                         continue
                         
                     # Normalisasi path
@@ -276,15 +276,12 @@ class App:
                                 file_exists = True
                     
                     if not file_exists:
-                        missing_songs.append((song['id'], song['name'], relative_path))  # Tambahkan path untuk debug
-                    else:
-                        # Debug: Tampilkan path yang berhasil ditemukan
-                        print(f"Found: {full_path}")
+                        missing_songs.append((song['id'], song['name']))  # Kembali ke 2 nilai
                     
                     processed += 1
                     self.queue.put(("progress", (processed, total)))
                 
-                for song_id, song_name in missing_songs:
+                for song_id, song_name in missing_songs:  # Unpack 2 nilai
                     self.queue.put(("add_missing", (song_id, song_name)))
                 
                 self.queue.put(("result", f"Total: {total} | Missing: {len(missing_songs)} | Found: {total - len(missing_songs)}"))
