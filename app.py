@@ -301,9 +301,14 @@ class App:
                 
                 for kategori in selected_categories:
                     search_path = os.path.join(server_location, kategori)
-                    
+                    move_path = os.path.join(search_path, "move")
+
                     if not os.path.exists(search_path):
                         continue
+
+                    # Buat folder 'move' jika belum ada
+                    if not os.path.exists(move_path):
+                        os.makedirs(move_path)
                         
                     # Hanya proses file di folder utama, tidak termasuk subfolder
                     for file in os.listdir(search_path):
@@ -316,7 +321,13 @@ class App:
 
                         # Jika file ID tidak ada di database, maka file tidak terpakai
                         if normalized_file not in db_song_ids:
-                            unused_files.append((file, file_path))
+                            # Pindahkan file ke folder 'move'
+                            new_path = os.path.join(move_path, file)
+                            try:
+                                shutil.move(file_path, new_path)
+                                unused_files.append((file, file_path, new_path))  # Simpan path lama dan baru
+                            except Exception as e:
+                                unused_files.append((file, file_path, f"Gagal memindahkan: {str(e)}"))
                         
                         processed_files += 1
                         # Update progress setiap file
@@ -327,8 +338,9 @@ class App:
                 self.queue.put(("progress", (processed_files, total_files)))
                 
                 # Tampilkan file yang tidak terpakai
-                for file_name, file_path in unused_files:
-                    self.queue.put(("add_missing", (file_name, file_path)))
+                for file_name, old_path, new_path in unused_files:
+                    display_text = f"{file_name}\t{old_path} -> {new_path}"
+                    self.queue.put(("add_missing", (file_name, display_text)))
                 
                 self.queue.put(("result", f"Total File Tidak Terpakai: {len(unused_files)}")) 
 
