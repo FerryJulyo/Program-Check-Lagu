@@ -5,6 +5,8 @@ import os
 import threading
 from queue import Queue
 import re
+import shutil
+import csv
 
 db_path = None
 server_location = ""
@@ -127,7 +129,7 @@ class App:
         self.tree_missing.heading("col1", text="")
         self.tree_missing.heading("col2", text="")
         self.tree_missing.column("col1", width=80, anchor="w")
-        self.tree_missing.column("col2", width=300, anchor="w")
+        self.tree_missing.column("col2", width=500, anchor="w")
         self.tree_missing.pack(fill="both", expand=True)
         
         scroll_y_missing.config(command=self.tree_missing.yview)
@@ -339,7 +341,7 @@ class App:
                 
                 # Tampilkan file yang tidak terpakai
                 for file_name, old_path, new_path in unused_files:
-                    display_text = f"{file_name}\t{old_path} -> {new_path}"
+                    display_text = f"{old_path} -> {new_path}"
                     self.queue.put(("add_missing", (file_name, display_text)))
                 
                 self.queue.put(("result", f"Total File Tidak Terpakai: {len(unused_files)}")) 
