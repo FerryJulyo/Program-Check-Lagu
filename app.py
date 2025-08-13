@@ -95,8 +95,6 @@ class App:
         self.frame_download = tk.Frame(self.root)
         self.btn_download = tk.Button(self.frame_download, text="Download CSV", command=self.download_csv)
         self.btn_download.pack(side="left", padx=5)
-        self.btn_open_folder = tk.Button(self.frame_download, text="Buka Folder Output", command=self.open_output_folder)
-        self.btn_open_folder.pack(side="left", padx=5)
         
         # Frame tabel
         frame_tables = tk.Frame(self.root)
@@ -403,7 +401,7 @@ class App:
         
         try:
             with open(file_path, 'w', newline='', encoding='utf-8') as csvfile:
-                writer = csv.writer(csvfile)
+                writer = csv.writer(csvfile, delimiter=';')
                 
                 # Tulis header
                 headers = [self.tree_missing.heading(col)['text'] for col in self.tree_missing['columns']]
@@ -418,24 +416,6 @@ class App:
         except Exception as e:
             messagebox.showerror("Error", f"Gagal menyimpan file CSV:\n{str(e)}")
     
-    def open_output_folder(self):
-        # Buka folder output (folder 'move' di kategori pertama yang dipilih)
-        selected_categories = [cat for cat, var in self.kategori_vars.items() if var.get() == 1]
-        if not selected_categories:
-            return
-            
-        server_location = self.entry_server.get().strip()
-        if not server_location:
-            return
-            
-        first_category = selected_categories[0]
-        move_path = os.path.join(server_location, first_category, "move")
-        
-        if os.path.exists(move_path):
-            os.startfile(move_path)
-        else:
-            messagebox.showinfo("Info", f"Folder output tidak ditemukan:\n{move_path}")
-
 if __name__ == "__main__":
     root = tk.Tk()
     root.iconbitmap("icon.ico")
