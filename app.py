@@ -252,13 +252,34 @@ class App:
                         missing_songs.append((song['id'], song['name']))
                         continue
                         
+                    # Normalisasi path
+                    relative_path = relative_path.strip()
                     if relative_path.startswith('\\'):
                         relative_path = relative_path[1:]
                     
+                    # Normalisasi separator path
+                    relative_path = relative_path.replace('/', '\\')
+                    
                     full_path = os.path.join(server_location, relative_path)
                     
-                    if not os.path.exists(full_path):
-                        missing_songs.append((song['id'], song['name']))
+                    # Cek file dengan case insensitive (untuk Windows)
+                    file_exists = False
+                    if os.path.exists(full_path):
+                        file_exists = True
+                    else:
+                        # Coba cari dengan case insensitive
+                        dir_path, filename = os.path.split(full_path)
+                        if os.path.exists(dir_path):
+                            actual_files = os.listdir(dir_path)
+                            # Bandingkan dengan case insensitive
+                            if filename.upper() in [f.upper() for f in actual_files]:
+                                file_exists = True
+                    
+                    if not file_exists:
+                        missing_songs.append((song['id'], song['name'], relative_path))  # Tambahkan path untuk debug
+                    else:
+                        # Debug: Tampilkan path yang berhasil ditemukan
+                        print(f"Found: {full_path}")
                     
                     processed += 1
                     self.queue.put(("progress", (processed, total)))
@@ -400,17 +421,24 @@ class App:
             return  # User membatalkan
         
         try:
-            with open(file_path, 'w', newline='', encoding='utf-8') as csvfile:
+            # Gunakan encoding utf-8-sig untuk support karakter khusus dan BOM
+            with open(file_path, 'w', newline='', encoding='utf-8-sig') as csvfile:
                 writer = csv.writer(csvfile, delimiter=';')
                 
                 # Tulis header
                 headers = [self.tree_missing.heading(col)['text'] for col in self.tree_missing['columns']]
                 writer.writerow(headers)
                 
-                # Tulis data
+                # Tulis data dengan handling karakter khusus
                 for item in self.tree_missing.get_children():
                     row = self.tree_missing.item(item)['values']
-                    writer.writerow(row)
+                    # Bersihkan dan normalisasi setiap nilai
+                    cleaned_row = [
+                        str(value).encode('utf-8', 'replace').decode('utf-8') 
+                        if value else '' 
+                        for value in row
+                    ]
+                    writer.writerow(cleaned_row)
             
             messagebox.showinfo("Sukses", f"File CSV berhasil disimpan di:\n{file_path}")
         except Exception as e:
