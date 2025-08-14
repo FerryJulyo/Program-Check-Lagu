@@ -1,4 +1,3 @@
-import sqlite3
 import tkinter as tk
 from tkinter import filedialog, ttk, messagebox
 import os
@@ -8,8 +7,10 @@ import re
 import shutil
 import csv
 import string
+import requests
+import json
 
-db_path = None
+api_url = "http://eportal.happypuppy.id/Api/get_vod_data"
 supported_formats = ['.dat', '.mp4', '.vob', '.mpg']
 
 class App:
@@ -20,25 +21,29 @@ class App:
         self.running = False
         
     def setup_ui(self):
-        self.root.title("Program Check Lagu VOD2 Ver. 20250801")
+        self.root.title("Program Check Lagu VOD2 Ver. 20250814")
         self.root.geometry("800x650")
         
         # Variabel
         self.search_mode = tk.IntVar(value=1)
         
-        # Frame atas
-        frame_top = tk.Frame(self.root)
-        frame_top.pack(fill="x", pady=5)
+        # Frame atas - API
+        frame_api = tk.Frame(self.root)
+        frame_api.pack(fill="x", pady=5)
         
-        # Pilih database
-        frame_db = tk.Frame(frame_top)
-        frame_db.pack(side="left", fill="x", expand=True)
+        lbl_api = tk.Label(frame_api, text="API URL:")
+        lbl_api.pack(side="left", padx=5)
         
-        btn_pilih = tk.Button(frame_db, text="Pilih Database", command=self.pilih_file)
-        btn_pilih.pack(side="left", padx=5)
+        self.entry_api = tk.Entry(frame_api, width=50)
+        self.entry_api.pack(side="left", padx=5, fill="x", expand=True)
+        self.entry_api.insert(0, api_url)
         
-        self.lbl_file = tk.Label(frame_db, text="Belum ada file dipilih", anchor="w")
-        self.lbl_file.pack(side="left", padx=5)
+        btn_test_api = tk.Button(frame_api, text="Test API", command=self.test_api)
+        btn_test_api.pack(side="left", padx=5)
+        
+        # Status API
+        self.lbl_api_status = tk.Label(self.root, text="Status API: Belum ditest", fg="orange")
+        self.lbl_api_status.pack(pady=2)
         
         # Mode pencarian
         frame_options = tk.Frame(self.root)
@@ -54,13 +59,14 @@ class App:
         frame_info = tk.LabelFrame(frame_options, text="Info Pencarian")
         frame_info.pack(side="left", fill="both", expand=True, padx=5, pady=5)
         
-        # info_text = "Pencarian dilakukan pada:\n"
-        # info_text += "• Drive D, E, F, dll (kecuali C)\n"
-        # info_text += "• File di direktori root (tidak dalam folder)\n"
-        # info_text += "• Format: DAT, MP4, VOB, MPG"
+        info_text = "Pencarian dilakukan pada:\n"
+        info_text += "• Drive D, E, F, dll (kecuali C)\n"
+        info_text += "• File di direktori root (tidak dalam folder)\n"
+        info_text += "• Format: DAT, MP4, VOB, MPG\n"
+        info_text += "• Data dari API eportal.happypuppy.id"
         
-        # lbl_info = tk.Label(frame_info, text=info_text, justify="left")
-        # lbl_info.pack(anchor="w", padx=5, pady=5)
+        lbl_info = tk.Label(frame_info, text=info_text, justify="left")
+        lbl_info.pack(anchor="w", padx=5, pady=5)
         
         # Tombol proses
         self.btn_proses = tk.Button(self.root, text="Proses", command=self.start_processing, bg="lightblue")
@@ -84,7 +90,7 @@ class App:
         frame_tables.pack(fill="both", expand=True)
         
         # Tabel database
-        frame_db = tk.LabelFrame(frame_tables, text="Data dari Database")
+        frame_db = tk.LabelFrame(frame_tables, text="Data dari API")
         frame_db.pack(side="left", fill="both", expand=True, padx=5, pady=5)
         
         scroll_y_db = ttk.Scrollbar(frame_db, orient="vertical")
@@ -167,27 +173,51 @@ class App:
         
         return root_files
     
-    def pilih_file(self):
-        global db_path
-        file_path = filedialog.askopenfilename(
-            title="Pilih file database (.db)",
-            filetypes=[("SQLite Database", "*.db"), ("All Files", "*.*")]
-        )
-        if file_path:
-            db_path = file_path
-            self.lbl_file.config(text=f"File dipilih: {file_path}")
+    def get_api_data(self):
+        """Ambil data dari API"""
+        try:
+            api_url = self.entry_api.get().strip()
+            if not api_url:
+                raise Exception("URL API tidak boleh kosong")
+            
+            response = requests.get(api_url, timeout=30)
+            response.raise_for_status()  # Raise exception untuk status HTTP error
+            
+            data = response.json()
+            
+            if not data.get('state', False):
+                raise Exception(f"API Error: {data.get('message', 'Unknown error')}")
+            
+            return data.get('data', [])
+            
+        except requests.exceptions.ConnectionError:
+            raise Exception("Tidak dapat terhubung ke API. Periksa koneksi internet atau URL API.")
+        except requests.exceptions.Timeout:
+            raise Exception("Timeout saat mengakses API. Coba lagi nanti.")
+        except requests.exceptions.HTTPError as e:
+            raise Exception(f"HTTP Error {e.response.status_code}: {e.response.reason}")
+        except json.JSONDecodeError:
+            raise Exception("Response API bukan format JSON yang valid.")
+        except Exception as e:
+            raise Exception(f"Error mengakses API: {str(e)}")
+    
+    def test_api(self):
+        """Test koneksi API"""
+        def test_api_thread():
+            try:
+                self.queue.put(("api_status", ("testing", "Status API: Testing...")))
+                data = self.get_api_data()
+                count = len(data) if data else 0
+                self.queue.put(("api_status", ("success", f"Status API: Berhasil! ({count} records)")))
+            except Exception as e:
+                self.queue.put(("api_status", ("error", f"Status API: Error - {str(e)}")))
+        
+        # Jalankan test di thread terpisah
+        thread = threading.Thread(target=test_api_thread, daemon=True)
+        thread.start()
     
     def start_processing(self):
         if self.running:
-            return
-            
-        # Validasi input
-        if not db_path:
-            messagebox.showwarning("Peringatan", "Pilih database terlebih dahulu.")
-            return
-            
-        if not os.path.exists(db_path):
-            messagebox.showerror("Error", f"File tidak ditemukan: {db_path}")
             return
         
         # Reset UI
@@ -204,21 +234,21 @@ class App:
         # Jalankan di thread terpisah
         thread = threading.Thread(
             target=self.proses_data,
-            args=(db_path, self.search_mode.get()),
+            args=(self.search_mode.get(),),
             daemon=True
         )
         thread.start()
     
-    def proses_data(self, db_path, mode):
+    def proses_data(self, mode):
         try:
-            conn = sqlite3.connect(db_path)
-            cursor = conn.cursor()
-
-            # Cek tabel song
-            cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
-            tables = [t[0] for t in cursor.fetchall()]
-            if "song" not in tables:
-                self.queue.put(("error", "Tabel 'song' tidak ditemukan."))
+            # Ambil data dari API
+            try:
+                api_data = self.get_api_data()
+                if not api_data:
+                    self.queue.put(("error", "Tidak ada data dari API."))
+                    return
+            except Exception as e:
+                self.queue.put(("error", f"Error mengakses API: {str(e)}"))
                 return
             
             # Dapatkan semua drive yang tersedia
@@ -228,19 +258,15 @@ class App:
                 return
                 
             if mode == 1:  # Mode Cari Lagu Belum
-                # Ambil semua data dari database
-                query = "SELECT song_id, song_name, song_relative_path FROM song ORDER BY song_id"
-                cursor.execute(query)
-                rows = cursor.fetchall()
-                
-                db_songs = []
-                for row in rows:
-                    song_id, song_name, relative_path = row
+                # Tampilkan data dari API
+                api_songs = []
+                for item in api_data:
+                    song_id = item.get('song_id', '')
+                    song_name = item.get('song_name', '')
                     self.queue.put(("add_db", (song_id, song_name)))
-                    db_songs.append({
+                    api_songs.append({
                         'id': song_id,
-                        'name': song_name,
-                        'relative_path': relative_path.strip() if relative_path else ''
+                        'name': song_name
                     })
                 
                 # Kumpulkan semua file dari drive
@@ -252,10 +278,10 @@ class App:
                         all_drive_files[normalized_name] = os.path.join(drive, file)
                 
                 missing_songs = []
-                total = len(db_songs)
+                total = len(api_songs)
                 processed = 0
                 
-                for song in db_songs:
+                for song in api_songs:
                     song_id = str(song['id']) if song['id'] else ''
                     normalized_id = self.normalize_filename(song_id)
                     
@@ -269,24 +295,22 @@ class App:
                 for song_id, song_name in missing_songs:
                     self.queue.put(("add_missing", (song_id, song_name)))
                 
-                self.queue.put(("result", f"Total DB: {total} | Missing: {len(missing_songs)} | Found: {total - len(missing_songs)}"))
+                self.queue.put(("result", f"Total API: {total} | Missing: {len(missing_songs)} | Found: {total - len(missing_songs)}"))
                 
             else:  # Mode Cari Lagu Tidak Terpakai
-                # Tampilkan data dari database
-                query = "SELECT song_id, song_name FROM song ORDER BY song_id"
-                cursor.execute(query)
-                rows = cursor.fetchall()
-                for row in rows:
-                    song_id, song_name = row
+                # Tampilkan data dari API
+                for item in api_data:
+                    song_id = item.get('song_id', '')
+                    song_name = item.get('song_name', '')
                     self.queue.put(("add_db", (song_id, song_name)))
                 
-                # Dapatkan semua song_id dari database
-                cursor.execute("SELECT song_id FROM song")
-                db_song_ids = set()
-                for row in cursor.fetchall():
-                    if row[0]:
-                        normalized_id = self.normalize_filename(str(row[0]))
-                        db_song_ids.add(normalized_id)
+                # Dapatkan semua song_id dari API
+                api_song_ids = set()
+                for item in api_data:
+                    song_id = item.get('song_id', '')
+                    if song_id:
+                        normalized_id = self.normalize_filename(str(song_id))
+                        api_song_ids.add(normalized_id)
                 
                 # Hitung total file untuk progress
                 total_files = 0
@@ -314,8 +338,8 @@ class App:
                         file_path = os.path.join(drive, file)
                         normalized_file = self.normalize_filename(file)
 
-                        # Jika file ID tidak ada di database, maka file tidak terpakai
-                        if normalized_file not in db_song_ids:
+                        # Jika file ID tidak ada di API, maka file tidak terpakai
+                        if normalized_file not in api_song_ids:
                             new_path = os.path.join(move_path, file)
                             try:
                                 shutil.move(file_path, new_path)
@@ -340,7 +364,6 @@ class App:
         except Exception as e:
             self.queue.put(("error", str(e)))
         finally:
-            conn.close()
             self.queue.put(("done", None))
     
     def process_queue(self):
@@ -361,6 +384,14 @@ class App:
                         self.progress["value"] = (processed / total) * 100
                 elif msg_type == "result":
                     self.lbl_result.config(text=data)
+                elif msg_type == "api_status":
+                    status_type, status_text = data
+                    if status_type == "success":
+                        self.lbl_api_status.config(text=status_text, fg="green")
+                    elif status_type == "error":
+                        self.lbl_api_status.config(text=status_text, fg="red")
+                    else:  # testing
+                        self.lbl_api_status.config(text=status_text, fg="orange")
                 elif msg_type == "error":
                     messagebox.showerror("Error", data)
                 elif msg_type == "done":
