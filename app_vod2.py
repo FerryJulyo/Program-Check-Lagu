@@ -27,24 +27,6 @@ class App:
         # Variabel
         self.search_mode = tk.IntVar(value=1)
         
-        # # Frame atas - API
-        # frame_api = tk.Frame(self.root)
-        # frame_api.pack(fill="x", pady=5)
-        
-        # lbl_api = tk.Label(frame_api, text="API URL:")
-        # lbl_api.pack(side="left", padx=5)
-        
-        # self.entry_api = tk.Entry(frame_api, width=50)
-        # self.entry_api.pack(side="left", padx=5, fill="x", expand=True)
-        # self.entry_api.insert(0, api_url)
-        
-        # btn_test_api = tk.Button(frame_api, text="Test API", command=self.test_api)
-        # btn_test_api.pack(side="left", padx=5)
-        
-        # # Status API
-        # self.lbl_api_status = tk.Label(self.root, text="Status API: Belum ditest", fg="orange")
-        # self.lbl_api_status.pack(pady=2)
-        
         # Mode pencarian
         frame_options = tk.Frame(self.root)
         frame_options.pack(fill="x", padx=5, pady=5)
@@ -63,7 +45,6 @@ class App:
         info_text += "• Drive D, E, F, dll (kecuali C)\n"
         info_text += "• File di direktori root (tidak dalam folder)\n"
         info_text += "• Format: DAT, MP4, VOB, MPG\n"
-        info_text += "• Data dari API"
         
         lbl_info = tk.Label(frame_info, text=info_text, justify="left")
         lbl_info.pack(anchor="w", padx=5, pady=5)
@@ -90,7 +71,7 @@ class App:
         frame_tables.pack(fill="both", expand=True)
         
         # Tabel database
-        frame_db = tk.LabelFrame(frame_tables, text="Data dari API")
+        frame_db = tk.LabelFrame(frame_tables, text="Data dari database")
         frame_db.pack(side="left", fill="both", expand=True, padx=5, pady=5)
         
         scroll_y_db = ttk.Scrollbar(frame_db, orient="vertical")
@@ -176,7 +157,7 @@ class App:
     def get_api_data(self):
         """Ambil data dari API"""
         try:
-            api_url = self.entry_api.get().strip()
+            api_url = "http://eportal.happypuppy.id/Api/get_vod_data"
             if not api_url:
                 raise Exception("URL API tidak boleh kosong")
             
