@@ -63,7 +63,7 @@ class App:
         info_text += "• Drive D, E, F, dll (kecuali C)\n"
         info_text += "• File di direktori root (tidak dalam folder)\n"
         info_text += "• Format: DAT, MP4, VOB, MPG\n"
-        info_text += "• Data dari API eportal.happypuppy.id"
+        info_text += "• Data dari API"
         
         lbl_info = tk.Label(frame_info, text=info_text, justify="left")
         lbl_info.pack(anchor="w", padx=5, pady=5)
