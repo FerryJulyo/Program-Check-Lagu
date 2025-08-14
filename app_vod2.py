@@ -7,15 +7,10 @@ from queue import Queue
 import re
 import shutil
 import csv
+import string
 
 db_path = None
-server_location = ""
-kategori_list = [
-    "Indonesia", "Indonesia1", "English", "English1",
-    "Mandarin", "Jepang", "Jepang2", "Jepang3",
-    "Filipina", "India", "Korea", "Korea2",
-    "Thailand", "Remix", "DVD", "DVD2"
-]
+supported_formats = ['.dat', '.mp4', '.vob', '.mpg']
 
 class App:
     def __init__(self, root):
@@ -25,12 +20,11 @@ class App:
         self.running = False
         
     def setup_ui(self):
-        self.root.title("Program Check Lagu Ver. 20250801")
+        self.root.title("Program Check Lagu VOD2 Ver. 20250801")
         self.root.geometry("800x650")
         
         # Variabel
         self.search_mode = tk.IntVar(value=1)
-        self.kategori_vars = {k: tk.IntVar() for k in kategori_list}
         
         # Frame atas
         frame_top = tk.Frame(self.root)
@@ -46,17 +40,6 @@ class App:
         self.lbl_file = tk.Label(frame_db, text="Belum ada file dipilih", anchor="w")
         self.lbl_file.pack(side="left", padx=5)
         
-        # Input server
-        frame_server = tk.Frame(frame_top)
-        frame_server.pack(side="right", fill="x")
-        
-        lbl_server = tk.Label(frame_server, text="Lokasi Server:")
-        lbl_server.pack(side="left", padx=5)
-        
-        self.entry_server = tk.Entry(frame_server, width=30)
-        self.entry_server.pack(side="left", padx=5)
-        self.entry_server.insert(0, "\\\\192.168.1.11")
-        
         # Mode pencarian
         frame_options = tk.Frame(self.root)
         frame_options.pack(fill="x", padx=5, pady=5)
@@ -67,17 +50,17 @@ class App:
         tk.Radiobutton(frame_radio, text="Lagu Belum", variable=self.search_mode, value=1).pack(anchor="w", padx=5, pady=2)
         tk.Radiobutton(frame_radio, text="Lagu Tidak Terpakai", variable=self.search_mode, value=2).pack(anchor="w", padx=5, pady=2)
 
-        # Kategori
-        frame_check = tk.LabelFrame(frame_options, text="Pilih Kategori Folder")
-        frame_check.pack(side="left", fill="both", expand=True, padx=5, pady=5)
-
-        # Hitung jumlah kolom untuk 3 baris
-        total_kategori = len(kategori_list)
-        cols_per_row = (total_kategori + 2) // 3  # Pembulatan ke atas untuk 3 baris
-
-        for idx, kategori in enumerate(kategori_list):
-            cb = tk.Checkbutton(frame_check, text=kategori, variable=self.kategori_vars[kategori])
-            cb.grid(row=idx // cols_per_row, column=idx % cols_per_row, sticky="w", padx=5, pady=2)
+        # Info format file
+        frame_info = tk.LabelFrame(frame_options, text="Info Pencarian")
+        frame_info.pack(side="left", fill="both", expand=True, padx=5, pady=5)
+        
+        # info_text = "Pencarian dilakukan pada:\n"
+        # info_text += "• Drive D, E, F, dll (kecuali C)\n"
+        # info_text += "• File di direktori root (tidak dalam folder)\n"
+        # info_text += "• Format: DAT, MP4, VOB, MPG"
+        
+        # lbl_info = tk.Label(frame_info, text=info_text, justify="left")
+        # lbl_info.pack(anchor="w", padx=5, pady=5)
         
         # Tombol proses
         self.btn_proses = tk.Button(self.root, text="Proses", command=self.start_processing, bg="lightblue")
@@ -153,6 +136,37 @@ class App:
             return match.group(1).upper()
         return name.upper()
     
+    def get_available_drives(self):
+        """Dapatkan semua drive yang tersedia kecuali C"""
+        drives = []
+        for letter in string.ascii_uppercase:
+            if letter == 'C':  # Skip drive C
+                continue
+            drive = f"{letter}:\\"
+            if os.path.exists(drive):
+                drives.append(drive)
+        return drives
+    
+    def get_root_files(self, drive_path):
+        """Dapatkan file di root drive dengan format yang didukung"""
+        root_files = []
+        try:
+            if os.path.exists(drive_path):
+                for item in os.listdir(drive_path):
+                    item_path = os.path.join(drive_path, item)
+                    # Hanya ambil file (bukan folder) dengan ekstensi yang didukung
+                    if os.path.isfile(item_path):
+                        _, ext = os.path.splitext(item.lower())
+                        if ext in supported_formats:
+                            root_files.append(item)
+        except PermissionError:
+            # Skip drive yang tidak bisa diakses
+            pass
+        except Exception as e:
+            print(f"Error accessing {drive_path}: {e}")
+        
+        return root_files
+    
     def pilih_file(self):
         global db_path
         file_path = filedialog.askopenfilename(
@@ -175,17 +189,7 @@ class App:
         if not os.path.exists(db_path):
             messagebox.showerror("Error", f"File tidak ditemukan: {db_path}")
             return
-            
-        server_location = self.entry_server.get().strip()
-        if not server_location:
-            messagebox.showwarning("Peringatan", "Masukkan lokasi server terlebih dahulu.")
-            return
-            
-        selected_categories = [cat for cat, var in self.kategori_vars.items() if var.get() == 1]
-        if not selected_categories:
-            messagebox.showwarning("Peringatan", "Pilih minimal 1 kategori.")
-            return
-            
+        
         # Reset UI
         for i in self.tree_db.get_children():
             self.tree_db.delete(i)
@@ -200,22 +204,15 @@ class App:
         # Jalankan di thread terpisah
         thread = threading.Thread(
             target=self.proses_data,
-            args=(db_path, server_location, selected_categories, self.search_mode.get()),
+            args=(db_path, self.search_mode.get()),
             daemon=True
         )
         thread.start()
     
-    def proses_data(self, db_path, server_location, selected_categories, mode):
+    def proses_data(self, db_path, mode):
         try:
             conn = sqlite3.connect(db_path)
             cursor = conn.cursor()
-
-            check_path = os.path.join(server_location, "Indonesia")
-
-            # Cek apakah path bisa diakses
-            if not os.path.exists(check_path):
-                messagebox.showwarning("Koneksi Gagal", f"Tidak dapat mengakses server")
-                return  # Stop proses
 
             # Cek tabel song
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
@@ -223,15 +220,18 @@ class App:
             if "song" not in tables:
                 self.queue.put(("error", "Tabel 'song' tidak ditemukan."))
                 return
+            
+            # Dapatkan semua drive yang tersedia
+            available_drives = self.get_available_drives()
+            if not available_drives:
+                self.queue.put(("error", "Tidak ada drive yang tersedia untuk dicek."))
+                return
                 
             if mode == 1:  # Mode Cari Lagu Belum
-                query = "SELECT song_id, song_name, song_relative_path FROM song WHERE " + \
-                        " OR ".join([f"song_relative_path LIKE '%{cat}%'" for cat in selected_categories]) + \
-                        " GROUP BY song_id ORDER BY song_id"
-                
+                # Ambil semua data dari database
+                query = "SELECT song_id, song_name, song_relative_path FROM song ORDER BY song_id"
                 cursor.execute(query)
                 rows = cursor.fetchall()
-                total = len(rows)
                 
                 db_songs = []
                 for row in rows:
@@ -243,125 +243,91 @@ class App:
                         'relative_path': relative_path.strip() if relative_path else ''
                     })
                 
+                # Kumpulkan semua file dari drive
+                all_drive_files = {}
+                for drive in available_drives:
+                    files = self.get_root_files(drive)
+                    for file in files:
+                        normalized_name = self.normalize_filename(file)
+                        all_drive_files[normalized_name] = os.path.join(drive, file)
+                
                 missing_songs = []
+                total = len(db_songs)
                 processed = 0
                 
                 for song in db_songs:
-                    relative_path = song['relative_path']
-                    if not relative_path:
-                        missing_songs.append((song['id'], song['name']))  # Hanya 2 nilai
-                        continue
-                        
-                    # Normalisasi path
-                    relative_path = relative_path.strip()
-                    if relative_path.startswith('\\'):
-                        relative_path = relative_path[1:]
+                    song_id = str(song['id']) if song['id'] else ''
+                    normalized_id = self.normalize_filename(song_id)
                     
-                    # Normalisasi separator path
-                    relative_path = relative_path.replace('/', '\\')
-                    
-                    full_path = os.path.join(server_location, relative_path)
-                    
-                    # Cek file dengan case insensitive (untuk Windows)
-                    file_exists = False
-                    if os.path.exists(full_path):
-                        file_exists = True
-                    else:
-                        # Coba cari dengan case insensitive
-                        dir_path, filename = os.path.split(full_path)
-                        if os.path.exists(dir_path):
-                            actual_files = os.listdir(dir_path)
-                            # Bandingkan dengan case insensitive
-                            if filename.upper() in [f.upper() for f in actual_files]:
-                                file_exists = True
-                    
-                    if not file_exists:
-                        missing_songs.append((song['id'], song['name']))  # Kembali ke 2 nilai
+                    # Cek apakah file ada di drive manapun
+                    if normalized_id not in all_drive_files:
+                        missing_songs.append((song['id'], song['name']))
                     
                     processed += 1
                     self.queue.put(("progress", (processed, total)))
                 
-                for song_id, song_name in missing_songs:  # Unpack 2 nilai
+                for song_id, song_name in missing_songs:
                     self.queue.put(("add_missing", (song_id, song_name)))
                 
-                self.queue.put(("result", f"Total: {total} | Missing: {len(missing_songs)} | Found: {total - len(missing_songs)}"))
+                self.queue.put(("result", f"Total DB: {total} | Missing: {len(missing_songs)} | Found: {total - len(missing_songs)}"))
                 
             else:  # Mode Cari Lagu Tidak Terpakai
                 # Tampilkan data dari database
-                query_select = "SELECT song_id, song_name, song_relative_path FROM song WHERE " + \
-                        " OR ".join([f"song_relative_path LIKE '%{cat}%'" for cat in selected_categories]) + \
-                        " GROUP BY song_id ORDER BY song_id"
-                
-                cursor.execute(query_select)
+                query = "SELECT song_id, song_name FROM song ORDER BY song_id"
+                cursor.execute(query)
                 rows = cursor.fetchall()
                 for row in rows:
-                    song_id, song_name, _ = row
+                    song_id, song_name = row
                     self.queue.put(("add_db", (song_id, song_name)))
                 
-                # Dapatkan semua song_id dari database untuk kategori yang dipilih
-                query_ids = "SELECT song_id FROM song WHERE " + \
-                        " OR ".join([f"song_relative_path LIKE '%{cat}%'" for cat in selected_categories]) + \
-                        " GROUP BY song_id "
-                
-                cursor.execute(query_ids)
+                # Dapatkan semua song_id dari database
+                cursor.execute("SELECT song_id FROM song")
                 db_song_ids = set()
                 for row in cursor.fetchall():
                     if row[0]:
-                        # Normalize song_id dari database
                         normalized_id = self.normalize_filename(str(row[0]))
                         db_song_ids.add(normalized_id)
                 
-                unused_files = []
+                # Hitung total file untuk progress
                 total_files = 0
+                for drive in available_drives:
+                    total_files += len(self.get_root_files(drive))
+                
+                unused_files = []
                 processed_files = 0
                 
-                # Hitung total file hanya di folder utama (tanpa subfolder)
-                for kategori in selected_categories:
-                    search_path = os.path.join(server_location, kategori)
-                    if os.path.exists(search_path):
-                        # Hanya file di folder utama, bukan subfolder
-                        total_files += len([f for f in os.listdir(search_path) 
-                                        if os.path.isfile(os.path.join(search_path, f))])
-                
-                # Kirim progress 0% di awal
                 self.queue.put(("progress", (0, total_files)))
                 
-                for kategori in selected_categories:
-                    search_path = os.path.join(server_location, kategori)
-                    move_path = os.path.join(search_path, "move")
-
-                    if not os.path.exists(search_path):
-                        continue
-
-                    # Buat folder 'move' jika belum ada
+                for drive in available_drives:
+                    # Buat folder 'move' di setiap drive
+                    move_path = os.path.join(drive, "move")
                     if not os.path.exists(move_path):
-                        os.makedirs(move_path)
-                        
-                    # Hanya proses file di folder utama, tidak termasuk subfolder
-                    for file in os.listdir(search_path):
-                        file_path = os.path.join(search_path, file)
-                        if not os.path.isfile(file_path):
+                        try:
+                            os.makedirs(move_path)
+                        except Exception as e:
+                            print(f"Tidak bisa membuat folder move di {drive}: {e}")
                             continue
-
-                        # Normalize nama file untuk perbandingan
+                    
+                    files = self.get_root_files(drive)
+                    
+                    for file in files:
+                        file_path = os.path.join(drive, file)
                         normalized_file = self.normalize_filename(file)
 
                         # Jika file ID tidak ada di database, maka file tidak terpakai
                         if normalized_file not in db_song_ids:
-                            # Pindahkan file ke folder 'move'
                             new_path = os.path.join(move_path, file)
                             try:
                                 shutil.move(file_path, new_path)
-                                unused_files.append((file, file_path, new_path))  # Simpan path lama dan baru
+                                unused_files.append((file, file_path, new_path))
                             except Exception as e:
                                 unused_files.append((file, file_path, f"Gagal memindahkan: {str(e)}"))
                         
                         processed_files += 1
-                        # Update progress setiap file
-                        if processed_files % 5 == 0:  # Update lebih sering untuk feedback visual
+                        if processed_files % 5 == 0:
                             self.queue.put(("progress", (processed_files, total_files)))
                 
-                # Pastikan progress terakhir di-update
+                # Update progress terakhir
                 self.queue.put(("progress", (processed_files, total_files)))
                 
                 # Tampilkan file yang tidak terpakai
@@ -369,7 +335,7 @@ class App:
                     display_text = f"{old_path} -> {new_path}"
                     self.queue.put(("add_missing", (file_name, display_text)))
                 
-                self.queue.put(("result", f"Total File Tidak Terpakai: {len(unused_files)}")) 
+                self.queue.put(("result", f"Total File Tidak Terpakai: {len(unused_files)}"))
 
         except Exception as e:
             self.queue.put(("error", str(e)))
@@ -441,9 +407,12 @@ class App:
             messagebox.showinfo("Sukses", f"File CSV berhasil disimpan di:\n{file_path}")
         except Exception as e:
             messagebox.showerror("Error", f"Gagal menyimpan file CSV:\n{str(e)}")
-    
+
 if __name__ == "__main__":
     root = tk.Tk()
-    root.iconbitmap("icon.ico")
+    try:
+        root.iconbitmap("icon.ico")
+    except:
+        pass  # Icon tidak ditemukan, lanjutkan tanpa icon
     app = App(root)
     root.mainloop()
