@@ -212,7 +212,7 @@ class App:
 
             check_path = os.path.join(server_location, "Indonesia")
 
-            # 2️⃣ Cek apakah path bisa diakses
+            # Cek apakah path bisa diakses
             if not os.path.exists(check_path):
                 messagebox.showwarning("Koneksi Gagal", f"Tidak dapat mengakses server")
                 return  # Stop proses
@@ -227,7 +227,7 @@ class App:
             if mode == 1:  # Mode Cari Lagu Belum
                 query = "SELECT song_id, song_name, song_relative_path FROM song WHERE " + \
                         " OR ".join([f"song_relative_path LIKE '%{cat}%'" for cat in selected_categories]) + \
-                        " ORDER BY song_id"
+                        " GROUP BY song_id ORDER BY song_id"
                 
                 cursor.execute(query)
                 rows = cursor.fetchall()
@@ -290,7 +290,7 @@ class App:
                 # Tampilkan data dari database
                 query_select = "SELECT song_id, song_name, song_relative_path FROM song WHERE " + \
                         " OR ".join([f"song_relative_path LIKE '%{cat}%'" for cat in selected_categories]) + \
-                        " ORDER BY song_id"
+                        " GROUP BY song_id ORDER BY song_id"
                 
                 cursor.execute(query_select)
                 rows = cursor.fetchall()
@@ -300,7 +300,8 @@ class App:
                 
                 # Dapatkan semua song_id dari database untuk kategori yang dipilih
                 query_ids = "SELECT song_id FROM song WHERE " + \
-                        " OR ".join([f"song_relative_path LIKE '%{cat}%'" for cat in selected_categories])
+                        " OR ".join([f"song_relative_path LIKE '%{cat}%'" for cat in selected_categories]) + \
+                        " GROUP BY song_id "
                 
                 cursor.execute(query_ids)
                 db_song_ids = set()
