@@ -27,23 +27,23 @@ class App:
         # Variabel
         self.search_mode = tk.IntVar(value=1)
         
-        # Frame atas - API
-        frame_api = tk.Frame(self.root)
-        frame_api.pack(fill="x", pady=5)
+        # # Frame atas - API
+        # frame_api = tk.Frame(self.root)
+        # frame_api.pack(fill="x", pady=5)
         
-        lbl_api = tk.Label(frame_api, text="API URL:")
-        lbl_api.pack(side="left", padx=5)
+        # lbl_api = tk.Label(frame_api, text="API URL:")
+        # lbl_api.pack(side="left", padx=5)
         
-        self.entry_api = tk.Entry(frame_api, width=50)
-        self.entry_api.pack(side="left", padx=5, fill="x", expand=True)
-        self.entry_api.insert(0, api_url)
+        # self.entry_api = tk.Entry(frame_api, width=50)
+        # self.entry_api.pack(side="left", padx=5, fill="x", expand=True)
+        # self.entry_api.insert(0, api_url)
         
-        btn_test_api = tk.Button(frame_api, text="Test API", command=self.test_api)
-        btn_test_api.pack(side="left", padx=5)
+        # btn_test_api = tk.Button(frame_api, text="Test API", command=self.test_api)
+        # btn_test_api.pack(side="left", padx=5)
         
-        # Status API
-        self.lbl_api_status = tk.Label(self.root, text="Status API: Belum ditest", fg="orange")
-        self.lbl_api_status.pack(pady=2)
+        # # Status API
+        # self.lbl_api_status = tk.Label(self.root, text="Status API: Belum ditest", fg="orange")
+        # self.lbl_api_status.pack(pady=2)
         
         # Mode pencarian
         frame_options = tk.Frame(self.root)
