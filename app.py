@@ -27,13 +27,9 @@ class App:
         # Variabel
         self.search_mode = tk.IntVar(value=1)
         
-        # Frame atas
-        frame_top = tk.Frame(self.root)
-        frame_top.pack(fill="x", pady=5)
-        
-        # URL API
-        frame_api = tk.Frame(frame_top)
-        frame_api.pack(side="left", fill="x", expand=True)
+        # Frame atas - API
+        frame_api = tk.Frame(self.root)
+        frame_api.pack(fill="x", pady=5)
         
         lbl_api = tk.Label(frame_api, text="API URL:")
         lbl_api.pack(side="left", padx=5)
@@ -46,7 +42,7 @@ class App:
         btn_test_api.pack(side="left", padx=5)
         
         # Status API
-        self.lbl_api_status = tk.Label(frame_top, text="Status API: Belum ditest", fg="orange")
+        self.lbl_api_status = tk.Label(self.root, text="Status API: Belum ditest", fg="orange")
         self.lbl_api_status.pack(pady=2)
         
         # Mode pencarian
